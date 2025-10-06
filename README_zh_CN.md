@@ -1,168 +1,147 @@
-[English](https://github.com/siyuan-note/plugin-sample/blob/main/README.md)
+[English](./README.md)
 
-# 思源笔记插件示例
+# 思源同步助手（SiYuan Sync）
 
-## 开始
+思源同步助手通过官方内核接口打包本地数据，并将快照上传到 [123 网盘](https://www.123pan.com/)，让你轻松实现备份与恢复。插件同时支持自动备份、手动备份以及按需恢复。
 
-* 通过 <kbd>Use this template</kbd> 按钮将该库文件复制到你自己的库中，请注意库名必须和插件名称一致，默认分支必须为 `main`
-* 将你的库克隆到本地开发文件夹中，为了方便可以直接将开发文件夹放置在 `{工作空间}/data/plugins/` 下
-* 安装 [NodeJS](https://nodejs.org/en/download) 和 [pnpm](https://pnpm.io/installation)，然后在开发文件夹下执行 `pnpm i`
-* 执行 `pnpm run dev` 进行实时编译
-* 在思源中打开集市并在下载选项卡中启用插件
+## ✨ 功能特性
 
-## 开发
+### 🎯 核心功能
 
-* i18n/*
-* icon.png (160*160)
-* index.css
-* index.js
-* plugin.json
-* preview.png (1024*768)
-* README*.md
-* [前端 API](https://github.com/siyuan-note/petal)
-* [后端 API](https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md)
+- **多种备份范围**：可按需备份工作空间、数据目录、配置目录以及开启本地加密时的 `repo` 目录
+- **智能增量备份**：使用 MD5 与更新时间判断文件变化，只备份有变化的内容
+- **123 网盘集成**：通过开放平台 API 上传文件，安全可靠
+- **自动备份策略**：支持在关闭思源时自动备份，可配置每日触发次数
+- **保留策略**：自动清理过期快照，支持按天数和数量双重限制
+- **快照恢复**：可一键恢复最新快照，或选择任意历史快照进行恢复
 
-## 国际化
+### 🚀 用户体验
 
-国际化方面我们主要考虑的是支持多语言，具体需要完成以下工作：
+- **实时进度提示**：备份和恢复时显示详细进度对话框
+  - 备份进度：准备 → 创建快照 → 上传 → 清理
+  - 恢复进度：同步索引 → 下载 → 恢复
+  - 显示当前处理的文件名和进度百分比
+- **友好的UI界面**：直观的设置面板，清晰的状态显示
+- **中英双语**：完整支持中文和英文界面
 
-* 插件自身的元信息，比如插件描述和自述文件
-  * plugin.json 中的 `description` 和 `readme` 字段，以及对应的 README*.md 文件
-* 插件中使用的文本，比如按钮文字和提示信息
-  * src/i18n/*.json 语言配置文件
-  * 代码中使用 `this.i18.key` 获取文本
-* 最后在 plugin.json 中的 `i18n` 字段中声明该插件支持的语言
+### 🔒 安全保障
 
-建议插件至少支持英文和简体中文，这样可以方便更多人使用。
+- **官方 API**：所有文件操作均调用思源内核 API，避免直接操作文件系统
+- **数据安全**：支持备份加密仓库（repo）数据
+- **版本控制**：保留多个历史版本，随时可恢复
 
-## plugin.json
+## 📋 使用条件
 
-```json
-{
-  "name": "plugin-sample",
-  "author": "Vanessa",
-  "url": "https://github.com/siyuan-note/plugin-sample",
-  "version": "0.1.3",
-  "minAppVersion": "2.8.8",
-  "backends": ["windows", "linux", "darwin"],
-  "frontends": ["desktop"],
-  "disabledInPublish": false,
-  "displayName": {
-    "default": "Plugin Sample",
-    "zh_CN": "插件示例"
-  },
-  "description": {
-    "default": "This is a plugin sample",
-    "zh_CN": "这是一个插件示例"
-  },
-  "readme": {
-    "default": "README.md",
-    "zh_CN": "README_zh_CN.md"
-  },
-  "funding": {
-    "openCollective": "",
-    "patreon": "",
-    "github": "",
-    "custom": [
-      "https://ld246.com/sponsor"
-    ]
-  },
-  "keywords": [
-    "sample", "示例"
-  ]
-}
-```
+- 思源笔记版本 `≥ 3.3.0`
+- 已开通 123 网盘开放平台应用（需获取 Client ID 与 Client Secret）
+  - 访问 [123 网盘开放平台](https://www.123pan.com/openapi) 申请
 
-* `name`：插件名称，必须和库名一致，且全局唯一（集市中不能有重名插件）
-* `author`：插件作者名
-* `url`：插件仓库地址
-* `version`：插件版本号，建议遵循 [semver](https://semver.org/lang/zh-CN/) 规范
-* `minAppVersion`：插件支持的最低思源笔记版本号
-* `disabledInPublish`：使用发布服务时是否禁用该插件，默认为 false
-* `backends`：插件需要的后端环境，可选值为 `windows`, `linux`, `darwin`, `docker`, `android`, `ios`, `harmony` and `all`
-  * `windows`：Windows 桌面端
-  * `linux`：Linux 桌面端
-  * `darwin`：macOS 桌面端
-  * `docker`：Docker 端
-  * `android`：Android 端
-  * `ios`：iOS 端
-  * `harmony`：鸿蒙端
-  * `all`：所有环境
-* `frontends`：插件需要的前端环境，可选值为 `desktop`, `desktop-window`, `mobile`, `browser-desktop`, `browser-mobile` and `all`
-  * `desktop`：桌面端
-  * `desktop-window`：桌面端页签转换的独立窗口
-  * `mobile`：移动端
-  * `browser-desktop`：桌面端浏览器
-  * `browser-mobile`：移动端浏览器
-  * `all`：所有环境
-* `displayName`：模板显示名称，主要用于模板集市列表中显示，支持多语言
-  * `default`：默认语言，必须存在
-  * `zh_CN`、`en_US` 等其他语言：可选，建议至少提供中文和英文
-* `description`：插件描述，主要用于插件集市列表中显示，支持多语言
-  * `default`：默认语言，必须存在
-  * `zh_CN`、`en_US` 等其他语言：可选，建议至少提供中文和英文
-* `readme`：自述文件名，主要用于插件集市详情页中显示，支持多语言
-  * `default`：默认语言，必须存在
-  * `zh_CN`、`en_US` 等其他语言：可选，建议至少提供中文和英文
-* `funding`：插件赞助信息
-  * `openCollective`：Open Collective 名称
-  * `patreon`：Patreon 名称
-  * `github`：GitHub 登录名
-  * `custom`：自定义赞助链接列表
-* `keywords`：搜索关键字列表，用于集市搜索功能
+## 🚀 快速上手
 
-## 打包
+### 1. 安装插件
 
-无论使用何种方式编译打包，我们最终需要生成一个 package.zip，它至少包含如下文件：
+- 从思源笔记集市下载并启用插件
+- 或手动下载 `package.zip` 到 `{工作空间}/data/plugins/` 目录
 
-* i18n/*
-* icon.png (160*160)
-* index.css
-* index.js
-* plugin.json
-* preview.png (1024*768)
-* README*.md
+### 2. 配置 123 网盘
 
-## 上架集市
+1. 打开插件设置
+2. 填写 **Client ID** 和 **Client Secret**
+3. 点击 **测试连接** 验证凭证
+4. 配置 **远程备份目录** 名称（默认：SiYuanSync）
 
-* 执行 `pnpm run build` 生成 package.zip
-* 在 GitHub 上创建一个新的发布，使用插件版本号作为 “Tag version”，示例 https://github.com/siyuan-note/plugin-sample/releases
-* 上传 package.zip 作为二进制附件
-* 提交发布
+### 3. 选择备份范围
 
-如果是第一次发布版本，还需要创建一个 PR 到 [Community Bazaar](https://github.com/siyuan-note/bazaar) 社区集市仓库，修改该库的
-plugins.json。该文件是所有社区插件库的索引，格式为：
+在"备份范围"中选择需要备份的内容：
 
-```json
-{
-  "repos": [
-    "username/reponame"
-  ]
-}
-```
+- **工作空间**：同时备份数据目录和配置目录（推荐）
+- **数据目录**：仅备份笔记数据
+- **配置目录**：仅备份思源配置
+- **加密仓库**：备份开启本地加密时的 repo 目录
 
-PR 被合并以后集市会通过 GitHub Actions 自动更新索引并部署。后续发布新版本插件时只需要按照上述步骤创建新的发布即可，不需要再
-PR 社区集市仓库。
+### 4. 配置自动备份（可选）
 
-正常情况下，社区集市仓库每隔 1 小时会自动更新索引并部署，可在 https://github.com/siyuan-note/bazaar/actions 查看部署状态。
+- **启用自动备份**：开启后可自动执行备份
+- **关闭时自动备份**：思源关闭时触发备份
+- **每日自动备份上限**：限制每天自动备份次数（默认：2 次）
+- **保留天数**：超过此天数的快照将被自动删除（默认：30 天）
+- **最多保存快照数**：超过此数量时删除最早的快照（默认：60 个）
 
-## 开发者须知
+### 5. 执行备份与恢复
 
-开发者需注意以下规范。
+**手动备份：**
+- 点击 **立即备份** 按钮
+- 查看实时进度对话框
+- 备份完成后自动关闭
 
-### 1. 读写文件规范
+**恢复快照：**
+- **恢复最新快照**：一键恢复最近的备份
+- **选择快照恢复**：从历史快照列表中选择特定版本
 
-插件或者外部扩展如果有直接读取或者写入 data 下文件的需求，请通过调用内核 API 来实现，**不要自行调用 `fs` 或者其他 electron、nodejs API**，否则可能会导致数据同步时分块丢失，造成云端数据损坏。
+## 💡 使用提示
 
-相关 API 见 `/api/file/*`（例如 `/api/file/getFile` 等）。
+### 备份说明
 
-### 2. Daily Note 属性规范
+- 插件会在 123 网盘根目录下创建指定的快照文件夹
+- 快照文件名格式：`{时间戳}--{类型}`，如 `20250106-123456--manual`
+- `repo` 目录的快照以 JSON 格式存储，体积可能较大
+- 自动备份在应用关闭时尽力执行，若数据量较大，请等待上传完成
 
-思源在创建日记的时候会自动为文档添加 custom-dailynote-yyyymmdd 属性，以方便将日记文档同普通文档区分。
+### 进度提示
 
-> 详情请见 [Github Issue #9807](https://github.com/siyuan-note/siyuan/issues/9807)。
+- **手动操作**时显示详细进度对话框
+- **自动备份**在后台静默执行，不干扰正常使用
+- 进度对话框显示：
+  - 当前操作步骤
+  - 进度百分比
+  - 正在处理的文件信息
 
-开发者在开发手动创建 Daily Note 的功能时请注意：
+### 最佳实践
 
-* 如果调用了 `/api/filetree/createDailyNote` 创建日记，那么文档会自动添加这个属性，无需开发者特别处理
-* 如果是开发者代码手动创建文档（例如使用 `createDocWithMd` API 创建日记），请手动为文档添加该属性
+1. **首次使用**：建议先手动备份一次，确认配置正确
+2. **定期检查**：在设置面板查看"远程快照数量"和"上次备份时间"
+3. **恢复前确认**：恢复操作会覆盖当前数据，请谨慎操作
+4. **多端同步**：123 网盘支持多设备访问，可在不同设备间同步数据
+
+## 🛠️ 技术架构
+
+### 核心技术
+
+- **TypeScript** + **Webpack** + **SCSS**
+- 思源笔记官方 API
+- 123 网盘开放平台 API
+
+### 主要模块
+
+- **配置管理**：自动获取工作空间路径和系统配置
+- **快照创建**：调用思源 API 导出数据和配置
+- **云端同步**：通过 123 网盘 API 上传下载文件
+- **备份策略**：增量备份、自动清理、保留策略
+- **进度管理**：实时进度对话框，友好的用户体验
+
+## 🔄 更新日志
+
+### v0.1.0 (2025-01-06)
+
+- ✨ 实现核心备份与恢复功能
+- ✨ 支持工作空间、数据、配置、repo 多种备份范围
+- ✨ 集成 123 网盘云端存储
+- ✨ 自动备份策略与保留策略
+- ✨ 实时进度提示对话框
+- ✨ 中英双语支持
+- 🎨 友好的 UI 界面设计
+
+## 📄 许可证
+
+MIT License
+
+## 🙏 致谢
+
+- [思源笔记](https://github.com/siyuan-note/siyuan) - 优秀的本地知识管理工具
+- [123 网盘](https://www.123pan.com/) - 提供云存储服务
+
+## 📞 反馈与支持
+
+如有问题或建议，欢迎：
+- 提交 [GitHub Issues](https://github.com/lkb/siyuan-sync/issues)
+- 在思源笔记社区讨论

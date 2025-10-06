@@ -1,179 +1,147 @@
-[中文](https://github.com/siyuan-note/plugin-sample/blob/main/README_zh_CN.md)
+[中文](./README_zh_CN.md)
 
-# SiYuan plugin sample
+# SiYuan Sync
 
-## Get started
+Automated local snapshots with 123Pan cloud backup and restore for SiYuan Notes. This plugin packages your local data via official kernel APIs and uploads snapshots to [123Pan](https://www.123pan.com/), enabling effortless backup and recovery with both automatic and manual modes.
 
-* Make a copy of this repo as a template with the <kbd>Use this template</kbd> button, please note that the repo name
-  must be the same as the plugin name, the default branch must be `main`
-* Clone your repo to a local development folder. For convenience, you can place this folder in
-  your `{workspace}/data/plugins/` folder
-* Install [NodeJS](https://nodejs.org/en/download) and [pnpm](https://pnpm.io/installation), then run `pnpm i` in the
-  command line under your repo folder
-* Execute `pnpm run dev` for real-time compilation
-* Open SiYuan marketplace and enable plugin in downloaded tab
+## ✨ Features
 
-## Development
+### 🎯 Core Capabilities
 
-* i18n/*
-* icon.png (160*160)
-* index.css
-* index.js
-* plugin.json
-* preview.png (1024*768)
-* README*.md
-* [Fontend API](https://github.com/siyuan-note/petal)
-* [Backend API](https://github.com/siyuan-note/siyuan/blob/master/API.md)
+- **Flexible Backup Scope**: Choose to backup workspace, data directory, configuration directory, or encrypted `repo` directory
+- **Smart Incremental Backup**: Uses MD5 hashing and timestamp checking to backup only changed content
+- **123Pan Integration**: Secure file uploads via the official 123Pan Open Platform API
+- **Auto-Backup Strategy**: Configurable automatic backups on app close with daily frequency limits
+- **Retention Policies**: Automatic cleanup of expired snapshots with both time-based and count-based limits
+- **Snapshot Restore**: One-click restore of the latest snapshot or select any historical version
 
-## I18n
+### 🚀 User Experience
 
-In terms of internationalization, our main consideration is to support multiple languages. Specifically, we need to
-complete the following tasks:
+- **Real-time Progress Dialog**: Detailed progress tracking for backup and restore operations
+  - Backup: Preparing → Creating Snapshot → Uploading → Cleaning
+  - Restore: Syncing Index → Downloading → Restoring
+  - Shows current file name and progress percentage
+- **Friendly UI**: Intuitive settings panel with clear status indicators
+- **Bilingual Support**: Full support for Chinese and English interfaces
 
-* Meta information about the plugin itself, such as plugin description and readme
-    * `description` and `readme` fields in plugin.json, and the corresponding README*.md file
-* Text used in the plugin, such as button text and tooltips
-    * src/i18n/*.json language configuration files
-    * Use `this.i18.key` to get the text in the code
-* Finally, declare the language supported by the plugin in the `i18n` field in plugin.json
+### 🔒 Security
 
-It is recommended that the plugin supports at least English and Simplified Chinese, so that more people can use it more
-conveniently.
+- **Official APIs**: All file operations use SiYuan kernel APIs to avoid direct filesystem access
+- **Data Safety**: Supports backup of encrypted repository (repo) data
+- **Version Control**: Maintains multiple historical versions for easy rollback
 
-## plugin.json
+## 📋 Requirements
 
-```json
-{
-  "name": "plugin-sample",
-  "author": "Vanessa",
-  "url": "https://github.com/siyuan-note/plugin-sample",
-  "version": "0.1.3",
-  "minAppVersion": "2.8.8",
-  "backends": ["windows", "linux", "darwin"],
-  "frontends": ["desktop"],
-  "disabledInPublish": false,
-  "displayName": {
-    "default": "Plugin Sample",
-    "zh_CN": "插件示例"
-  },
-  "description": {
-    "default": "This is a plugin sample",
-    "zh_CN": "这是一个插件示例"
-  },
-  "readme": {
-    "default": "README.md",
-    "zh_CN": "README_zh_CN.md"
-  },
-  "funding": {
-    "openCollective": "",
-    "patreon": "",
-    "github": "",
-    "custom": [
-      "https://ld246.com/sponsor"
-    ]
-  },
-  "keywords": [
-    "sample", "示例"
-  ]
-}
-```
+- SiYuan Notes version `≥ 3.3.0`
+- 123Pan Open Platform application (Client ID and Client Secret required)
+  - Apply at [123Pan Open Platform](https://www.123pan.com/openapi)
 
-* `name`: Plugin name, must be the same as the repo name, and must be unique globally (no duplicate plugin names in the
-  marketplace)
-* `author`: Plugin author name
-* `url`: Plugin repo URL
-* `version`: Plugin version number, it is recommended to follow the [semver](https://semver.org/) specification
-* `minAppVersion`: Minimum version number of SiYuan required to use this plugin
-* `disabledInPublish`: Whether to diable the plugin in publish service
-* `backends`: Backend environment required by the plugin, optional values are `windows`, `linux`, `darwin`, `docker`, `android`, `ios`, `harmony` and `all`
-  * `windows`: Windows desktop
-  * `linux`: Linux desktop
-  * `darwin`: macOS desktop
-  * `docker`: Docker
-  * `android`: Android APP
-  * `ios`: iOS APP
-  * `harmony`: HarmonyOS APP
-  * `all`: All environments
-* `frontends`: Frontend environment required by the plugin, optional values are `desktop`, `desktop-window`, `mobile`, `browser-desktop`, `browser-mobile` and `all`
-  * `desktop`: Desktop
-  * `desktop-window`: Desktop window converted from tab
-  * `mobile`: Mobile APP
-  * `browser-desktop`: Desktop browser
-  * `browser-mobile`: Mobile browser
-  * `all`: All environments
-* `displayName`: Template display name, mainly used for display in the marketplace list, supports multiple languages
-    * `default`: Default language, must exist
-    * `zh_CN`, `en_US` and other languages: optional, it is recommended to provide at least Chinese and English
-* `description`: Plugin description, mainly used for display in the marketplace list, supports multiple languages
-    * `default`: Default language, must exist
-    * `zh_CN`, `en_US` and other languages: optional, it is recommended to provide at least Chinese and English
-* `readme`: readme file name, mainly used to display in the marketplace details page, supports multiple languages
-    * `default`: Default language, must exist
-    * `zh_CN`, `en_US` and other languages: optional, it is recommended to provide at least Chinese and English
-* `funding`: Plugin sponsorship information
-    * `openCollective`: Open Collective name
-    * `patreon`: Patreon name
-    * `github`: GitHub login name
-    * `custom`: Custom sponsorship link list
-* `keywords`: Search keyword list, used for marketplace search function
+## 🚀 Quick Start
 
-## Package
+### 1. Install Plugin
 
-No matter which method is used to compile and package, we finally need to generate a package.zip, which contains at
-least the following files:
+- Download and enable from SiYuan Notes marketplace
+- Or manually download `package.zip` to `{workspace}/data/plugins/` directory
 
-* i18n/*
-* icon.png (160*160)
-* index.css
-* index.js
-* plugin.json
-* preview.png (1024*768)
-* README*.md
+### 2. Configure 123Pan
 
-## List on the marketplace
+1. Open plugin settings
+2. Enter **Client ID** and **Client Secret**
+3. Click **Test Connection** to verify credentials
+4. Configure **Remote Folder** name (default: SiYuanSync)
 
-* `pnpm run build` to generate package.zip
-* Create a new GitHub release using your new version number as the "Tag version". See here for an
-  example: https://github.com/siyuan-note/plugin-sample/releases
-* Upload the file package.zip as binary attachments
-* Publish the release
+### 3. Select Backup Scope
 
-If it is the first release, please create a pull request to
-the [Community Bazaar](https://github.com/siyuan-note/bazaar) repository and modify the plugins.json file in it. This
-file is the index of all community plugin repositories, the format is:
+Choose what to backup in "Backup Scope":
 
-```json
-{
-  "repos": [
-    "username/reponame"
-  ]
-}
-```
+- **Workspace**: Backup both data and configuration directories (recommended)
+- **Data Directory**: Backup notes data only
+- **Configuration Directory**: Backup SiYuan settings only
+- **Encrypted Repository**: Backup the repo directory when local encryption is enabled
 
-After the PR is merged, the bazaar will automatically update the index and deploy through GitHub Actions. When releasing
-a new version of the plugin in the future, you only need to follow the above steps to create a new release, and you
-don't need to PR the community bazaar repo.
+### 4. Configure Auto-Backup (Optional)
 
-Under normal circumstances, the community bazaar repo will automatically update the index and deploy every hour,
-and you can check the deployment status at https://github.com/siyuan-note/bazaar/actions.
+- **Enable Auto Backup**: Turn on automatic backups
+- **Backup on Close**: Trigger backup when SiYuan closes
+- **Daily Auto Backup Limit**: Maximum automatic backups per day (default: 2)
+- **Retention Days**: Delete snapshots older than this (default: 30 days)
+- **Maximum Snapshots**: Delete oldest snapshots when exceeding this count (default: 60)
 
-## Developer's Guide
+### 5. Backup & Restore
 
-Developers need to pay attention to the following specifications.
+**Manual Backup:**
+- Click **Backup Now** button
+- View real-time progress dialog
+- Automatically closes when complete
 
-### 1. File Reading and Writing Specifications
+**Restore Snapshot:**
+- **Restore Latest Snapshot**: One-click restore of most recent backup
+- **Choose Snapshot**: Select specific version from history
 
-If plugins or external extensions require direct reading or writing of files under the `data` directory, please use the kernel API to achieve this. **Do not call `fs` or other electron or nodejs APIs directly**, as it may result in data loss during synchronization and cause damage to cloud data.
+## 💡 Usage Tips
 
-Related APIs can be found at: `/api/file/*` (e.g., `/api/file/getFile`).
+### Backup Notes
 
-### 2. Daily Note Attribute Specifications
+- Plugin creates a snapshot folder in 123Pan root directory
+- Snapshot naming format: `{timestamp}--{type}`, e.g., `20250106-123456--manual`
+- `repo` directory snapshots are stored in JSON format and may be large
+- Auto-backup tries to execute on app close; wait for upload completion if data size is large
 
-When creating a daily note in SiYuan, a custom-dailynote-yyyymmdd attribute will be automatically added to the document to distinguish it from regular documents.
+### Progress Indicators
 
-> For more details, please refer to [Github Issue #9807](https://github.com/siyuan-note/siyuan/issues/9807).
+- **Manual operations** show detailed progress dialogs
+- **Auto-backup** runs silently in the background without interruption
+- Progress dialog displays:
+  - Current operation step
+  - Progress percentage
+  - Current file being processed
 
-Developers should pay attention to the following when developing the functionality to manually create Daily Notes:
+### Best Practices
 
-* If `/api/filetree/createDailyNote` is called to create a daily note, the attribute will be automatically added to the document, and developers do not need to handle it separately
-* If a document is created manually by developer's code (e.g., using the `createDocWithMd` API to create a daily note), please manually add this attribute to the document
+1. **First Use**: Recommended to do a manual backup first to verify configuration
+2. **Regular Checks**: Monitor "Remote Snapshot Count" and "Last Backup Time" in settings
+3. **Before Restore**: Restore operations overwrite current data - use with caution
+4. **Multi-device Sync**: 123Pan supports multi-device access for cross-device data synchronization
+
+## 🛠️ Technical Architecture
+
+### Core Technologies
+
+- **TypeScript** + **Webpack** + **SCSS**
+- SiYuan Notes Official API
+- 123Pan Open Platform API
+
+### Main Modules
+
+- **Config Management**: Auto-retrieves workspace paths and system configuration
+- **Snapshot Creation**: Exports data and config via SiYuan APIs
+- **Cloud Sync**: Uploads/downloads files via 123Pan API
+- **Backup Strategy**: Incremental backup, auto-cleanup, retention policies
+- **Progress Management**: Real-time progress dialogs for excellent user experience
+
+## 🔄 Changelog
+
+### v0.1.0 (2025-01-06)
+
+- ✨ Implemented core backup and restore features
+- ✨ Support for workspace, data, config, and repo backup scopes
+- ✨ Integrated 123Pan cloud storage
+- ✨ Auto-backup strategy and retention policies
+- ✨ Real-time progress indicator dialogs
+- ✨ Bilingual support (Chinese & English)
+- 🎨 User-friendly UI design
+
+## 📄 License
+
+MIT License
+
+## 🙏 Acknowledgments
+
+- [SiYuan Notes](https://github.com/siyuan-note/siyuan) - Excellent local knowledge management tool
+- [123Pan](https://www.123pan.com/) - Cloud storage service provider
+
+## 📞 Feedback & Support
+
+For issues or suggestions:
+- Submit [GitHub Issues](https://github.com/lkb/siyuan-sync/issues)
+- Discuss in SiYuan Notes community
