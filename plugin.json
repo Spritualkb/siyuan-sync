@@ -1,8 +1,8 @@
 {
   "name": "siyuan-sync",
   "author": "lkb",
-  "url": "https://github.com/lkb/siyuan-sync",
-  "version": "0.1.0",
+  "url": "https://github.com/Spritualkb/siyuan-sync",
+  "version": "1.0.0",
   "minAppVersion": "3.3.0",
   "backends": [
     "windows",
