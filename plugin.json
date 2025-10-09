@@ -2,7 +2,7 @@
   "name": "siyuan-sync",
   "author": "lkb",
   "url": "https://github.com/Spritualkb/siyuan-sync",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "minAppVersion": "3.3.0",
   "backends": [
     "windows",
