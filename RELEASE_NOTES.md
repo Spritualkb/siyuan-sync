@@ -1,3 +1,15 @@
+## 🚀 v1.2.0 分片上传突破 1GB 限制
+
+本次更新针对大体积备份引入官方分片上传流程：
+
+- 🧩 自动使用 123 网盘 V2 分片接口，突破单文件 1 GB 上限
+- 🔁 上传完成阶段自动轮询，确保云端合并成功
+- 📊 备份进度条实时反映分片上传进度
+
+> 若曾因 "文件大小不能超过1GB" 导致备份失败，请升级至 v1.2.0 后重试。
+
+---
+
 ## 🚀 v1.1.0 压缩 repo 备份
 
 本次更新专注于提升加密仓库（repo）备份的稳定性与性能：
@@ -32,4 +44,4 @@
 
 ---
 
-**Full Changelog**: https://github.com/Spritualkb/siyuan-sync/commits/v1.1.0
+**Full Changelog**: https://github.com/Spritualkb/siyuan-sync/commits/v1.2.0

@@ -1,7 +1,9 @@
 import {AccessTokenInfo} from "../types";
+import {md5} from "../utils/md5";
 
 const API_BASE = "https://open-api.123pan.com";
 const PLATFORM_HEADER = {Platform: "open_platform"};
+const DEFAULT_SLICE_SIZE = 16 * 1024 * 1024; // 16MB fallback
 
 export interface CloudFile {
     fileId: number;
@@ -22,11 +24,20 @@ export interface UploadSingleOptions {
     size: number;
     filename: string;
     duplicateStrategy?: number; // 1 keep both, 2 override
+    onProgress?: (uploadedBytes: number, totalBytes: number) => void;
 }
 
 export interface UploadResult {
     fileId: number;
     completed: boolean;
+}
+
+interface UploadSession {
+    fileId?: number;
+    reuse?: boolean;
+    preuploadId?: string;
+    sliceSize?: number;
+    servers?: string[];
 }
 
 export class Pan123Client {
@@ -149,31 +160,146 @@ export class Pan123Client {
     }
 
     public async uploadSingle(options: UploadSingleOptions): Promise<UploadResult> {
-        const domain = await this.getUploadDomain();
-        const form = new FormData();
-        form.append("file", options.file);
-        form.append("parentFileID", `${options.parentId}`);
-        form.append("filename", options.filename);
-        form.append("etag", options.md5);
-        form.append("size", `${options.size}`);
+        const session = await this.createUploadSession(options);
+        if (session.reuse && session.fileId) {
+            options.onProgress?.(options.size, options.size);
+            return {fileId: session.fileId, completed: true};
+        }
+
+        if (!session.preuploadId) {
+            throw new Error("创建上传任务失败：缺少 preuploadID");
+        }
+
+        const server = await this.resolveUploadServer(session.servers);
+        await this.uploadSlices(server, session, options);
+        const result = await this.completeUpload(session.preuploadId);
+        if (!result.fileId && session.fileId) {
+            // fallback when complete doesn't echo fileId but create did
+            result.fileId = session.fileId;
+        }
+        return result;
+    }
+
+    private async createUploadSession(options: UploadSingleOptions): Promise<UploadSession> {
+        const payload: Record<string, unknown> = {
+            parentFileID: options.parentId,
+            filename: options.filename,
+            etag: options.md5,
+            size: options.size,
+        };
         if (options.duplicateStrategy) {
-            form.append("duplicate", `${options.duplicateStrategy}`);
+            payload.duplicate = options.duplicateStrategy;
         }
-        const response = await fetch(`${domain}/upload/v2/file/single/create`, {
+
+        const response = await fetch(`${API_BASE}/upload/v2/file/create`, {
             method: "POST",
-            headers: this.authHeaders(),
-            body: form,
+            headers: this.authHeaders({"Content-Type": "application/json"}),
+            body: JSON.stringify(payload),
         });
-        await this.ensureOk(response, "上传文件失败");
-        const payload = await response.json();
-        if (payload.code !== 0) {
-            throw new Error(payload.message || "上传文件失败");
+        await this.ensureOk(response, "创建上传任务失败");
+        const payloadJson = await response.json();
+        if (payloadJson.code !== 0) {
+            throw new Error(payloadJson.message || "创建上传任务失败");
         }
-        const data = payload.data ?? payload;
+        const data = payloadJson.data ?? {};
+        const servers: string[] | undefined = Array.isArray(data.servers)
+            ? data.servers
+            : (typeof data.server === "string" ? [data.server] : undefined);
         return {
             fileId: data.fileID ?? data.fileId ?? 0,
-            completed: data.completed ?? false,
+            reuse: data.reuse ?? false,
+            preuploadId: data.preuploadID ?? data.preUploadID ?? data.preuploadId,
+            sliceSize: data.sliceSize ?? data.slice_size ?? data.slice_size_bytes,
+            servers,
         };
+    }
+
+    private async resolveUploadServer(servers?: string[]): Promise<string> {
+        if (servers && servers.length > 0) {
+            return servers[0];
+        }
+        return await this.getUploadDomain();
+    }
+
+    private normalizeServer(server: string): string {
+        if (!server.startsWith("http")) {
+            return `https://${server.replace(/^\/+/, "")}`.replace(/\/+$/, "");
+        }
+        return server.replace(/\/+$/, "");
+    }
+
+    private async uploadSlices(server: string, session: UploadSession, options: UploadSingleOptions): Promise<void> {
+        const normalizedServer = this.normalizeServer(server);
+        const chunkSize = session.sliceSize && session.sliceSize > 0 ? session.sliceSize : DEFAULT_SLICE_SIZE;
+        const totalSize = options.size;
+        let offset = 0;
+        let sliceNo = 1;
+        let uploadedBytes = 0;
+        const preuploadId = session.preuploadId as string;
+
+        while (offset < totalSize) {
+            const end = Math.min(offset + chunkSize, totalSize);
+            const chunk = options.file.slice(offset, end);
+            const buffer = await chunk.arrayBuffer();
+            const chunkMd5 = md5(buffer);
+
+            const form = new FormData();
+            form.append("preuploadID", preuploadId);
+            form.append("sliceNo", `${sliceNo}`);
+            form.append("sliceMD5", chunkMd5);
+            form.append("slice", chunk, options.filename);
+
+            const response = await fetch(`${normalizedServer}/upload/v2/file/slice`, {
+                method: "POST",
+                headers: this.authHeaders(),
+                body: form,
+            });
+            await this.ensureOk(response, "分片上传失败");
+            const reply = await response.json();
+            if (reply.code !== 0) {
+                throw new Error(reply.message || `分片上传失败（第${sliceNo}片）`);
+            }
+
+            uploadedBytes += chunk.size;
+            options.onProgress?.(uploadedBytes, totalSize);
+            offset = end;
+            sliceNo += 1;
+        }
+
+        if (totalSize === 0) {
+            options.onProgress?.(0, 0);
+        }
+    }
+
+    private async completeUpload(preuploadId: string): Promise<UploadResult> {
+        const maxAttempts = 30;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            const response = await fetch(`${API_BASE}/upload/v2/file/upload_complete`, {
+                method: "POST",
+                headers: this.authHeaders({"Content-Type": "application/json"}),
+                body: JSON.stringify({preuploadID: preuploadId}),
+            });
+            await this.ensureOk(response, "合并分片失败");
+            const payload = await response.json();
+            if (payload.code !== 0) {
+                throw new Error(payload.message || "合并分片失败");
+            }
+            const data = payload.data ?? {};
+            if (data.completed || data.fileID) {
+                const fileId = data.fileID ?? data.fileId ?? 0;
+                const completed = data.completed ?? (fileId ? true : false);
+                return {
+                    fileId,
+                    completed: Boolean(completed),
+                };
+            }
+            await this.sleep(1000);
+        }
+        throw new Error("等待云端合并分片超时");
+    }
+
+    private async sleep(ms: number): Promise<void> {
+        await new Promise(resolve => setTimeout(resolve, ms));
     }
 
     private async getUploadDomain(): Promise<string> {

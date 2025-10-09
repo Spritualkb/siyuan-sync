@@ -1111,11 +1111,13 @@ export default class SiyuanSyncPlugin extends Plugin {
         const folderId = await this.cloudClient.createFolder(folderName, rootFolderId);
         const remoteComponents: SnapshotRemoteComponent[] = [];
 
-        for (let i = 0; i < snapshot.components.length; i++) {
+        const totalComponents = snapshot.components.length;
+        for (let i = 0; i < totalComponents; i++) {
             const component = snapshot.components[i];
+            const progressLabel = `${this.t("progressUploading")} ${component.file.name} (${i + 1}/${totalComponents})`;
             if (progress) {
-                const uploadProgress = (i / snapshot.components.length) * 100;
-                progress.updateStepProgress(2, uploadProgress, `${this.t("progressUploading")} ${component.file.name} (${i + 1}/${snapshot.components.length})`);
+                const uploadProgress = (i / totalComponents) * 100;
+                progress.updateStepProgress(2, uploadProgress, progressLabel);
             }
 
             const result = await this.cloudClient.uploadSingle({
@@ -1125,7 +1127,19 @@ export default class SiyuanSyncPlugin extends Plugin {
                 md5: component.md5,
                 size: component.size,
                 duplicateStrategy: 2,
+                onProgress: (uploadedBytes, totalBytes) => {
+                    if (!progress) {
+                        return;
+                    }
+                    const ratio = totalBytes > 0 ? uploadedBytes / totalBytes : 1;
+                    const overall = ((i + ratio) / totalComponents) * 100;
+                    progress.updateStepProgress(2, overall, progressLabel);
+                },
             });
+            if (progress) {
+                const finalPercent = ((i + 1) / totalComponents) * 100;
+                progress.updateStepProgress(2, finalPercent, progressLabel);
+            }
             remoteComponents.push({
                 category: component.category,
                 component: component.component,
