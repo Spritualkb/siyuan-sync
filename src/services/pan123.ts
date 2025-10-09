@@ -288,7 +288,12 @@ export class Pan123Client {
             await this.ensureOk(response, "合并分片失败");
             const payload = await response.json();
             if (payload.code !== 0) {
-                throw new Error(payload.message || "合并分片失败");
+                const message: string = payload.message || "";
+                if (message.includes("校验") || payload.code === 20005 || payload.code === 40005) {
+                    await this.sleep(1000);
+                    continue;
+                }
+                throw new Error(message || "合并分片失败");
             }
             const data = payload.data ?? {};
             if (data.completed || data.fileID) {
