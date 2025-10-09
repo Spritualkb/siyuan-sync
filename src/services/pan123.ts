@@ -239,15 +239,16 @@ export class Pan123Client {
 
         while (offset < totalSize) {
             const end = Math.min(offset + chunkSize, totalSize);
-            const chunk = options.file.slice(offset, end);
-            const buffer = await chunk.arrayBuffer();
-            const chunkMd5 = md5(buffer);
+            const buffer = await options.file.slice(offset, end).arrayBuffer();
+            const chunkMd5 = md5(buffer).toLowerCase();
+            const chunkBlob = new Blob([buffer], {type: "application/octet-stream"});
+            const partName = `${options.filename}.part${sliceNo}`;
 
             const form = new FormData();
             form.append("preuploadID", preuploadId);
             form.append("sliceNo", `${sliceNo}`);
             form.append("sliceMD5", chunkMd5);
-            form.append("slice", chunk, options.filename);
+            form.append("slice", chunkBlob, partName);
 
             const response = await fetch(`${normalizedServer}/upload/v2/file/slice`, {
                 method: "POST",
@@ -260,7 +261,12 @@ export class Pan123Client {
                 throw new Error(reply.message || `分片上传失败（第${sliceNo}片）`);
             }
 
-            uploadedBytes += chunk.size;
+            const serverMd5 = reply?.data?.md5 ?? reply?.data?.sliceMD5;
+            if (typeof serverMd5 === "string" && serverMd5.toLowerCase() !== chunkMd5) {
+                throw new Error(`分片校验失败（第${sliceNo}片）`);
+            }
+
+            uploadedBytes += chunkBlob.size;
             options.onProgress?.(uploadedBytes, totalSize);
             offset = end;
             sliceNo += 1;
