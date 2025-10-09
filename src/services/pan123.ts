@@ -230,6 +230,10 @@ export class Pan123Client {
 
     private async uploadSlices(server: string, session: UploadSession, options: UploadSingleOptions): Promise<void> {
         const normalizedServer = this.normalizeServer(server);
+        // 验证服务器地址有效性（对齐 test-upload.js:84-86）
+        if (!normalizedServer || normalizedServer === "https:" || normalizedServer === "https://") {
+            throw new Error("无效的上传服务器地址");
+        }
         const chunkSize = session.sliceSize && session.sliceSize > 0 ? session.sliceSize : DEFAULT_SLICE_SIZE;
         const totalSize = options.size;
         let offset = 0;
@@ -258,7 +262,8 @@ export class Pan123Client {
             await this.ensureOk(response, "分片上传失败");
             const reply = await response.json();
             if (reply.code !== 0) {
-                throw new Error(reply.message || `分片上传失败（第${sliceNo}片）`);
+                // 对齐 test-upload.js:112 的错误消息格式
+                throw new Error(`分片 ${sliceNo} 上传失败: ${reply.message || '未知错误'}`);
             }
 
             const serverMd5 = reply?.data?.md5 ?? reply?.data?.sliceMD5;
@@ -296,9 +301,8 @@ export class Pan123Client {
 
                 if (isStillVerifying) {
                     console.warn(`[Pan123] 云端正在校验分片，第${attempt}/${maxAttempts}次尝试，错误码：${code}，消息：${message}`);
-                    // 使用递增的等待时间，给云端更多处理时间
-                    const waitTime = Math.min(1000 + (attempt - 1) * 200, 3000);
-                    await this.sleep(waitTime);
+                    // 使用固定1秒等待时间，与 test-upload.js:143 保持一致
+                    await this.sleep(1000);
                     continue;
                 }
                 // 其他错误（包括"校验失败"）直接抛出，不再重试

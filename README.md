@@ -122,6 +122,13 @@ Choose what to backup in "Backup Scope":
 
 ## 🔄 Changelog
 
+### v1.2.4 (2025-01-10)
+
+- 🔧 Optimized upload implementation, fully aligned with test script's proven approach
+  - Added server address validation
+  - Unified retry wait time to fixed 1 second
+  - Standardized error message format for easier troubleshooting
+
 ### v0.1.0 (2025-01-06)
 
 - ✨ Implemented core backup and restore features

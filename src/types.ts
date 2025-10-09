@@ -62,6 +62,7 @@ export interface SnapshotRemoteComponent {
     md5: string;
     size: number;
     uploadedAt: string;
+    meta?: Record<string, unknown>;
 }
 
 export interface SnapshotRemoteMeta {
