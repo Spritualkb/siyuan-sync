@@ -289,16 +289,26 @@ export class Pan123Client {
             const payload = await response.json();
             if (payload.code !== 0) {
                 const message: string = payload.message || "";
-                if (message.includes("校验") || payload.code === 20005 || payload.code === 40005) {
-                    await this.sleep(1000);
+                const code = payload.code;
+                // 检查是否是"校验中"状态（需要重试），参考测试脚本的成功实现
+                // 只匹配"校验中"，避免误判"校验失败"等最终错误
+                const isStillVerifying = /校验中/.test(message) || code === 20005 || code === 40005;
+
+                if (isStillVerifying) {
+                    console.warn(`[Pan123] 云端正在校验分片，第${attempt}/${maxAttempts}次尝试，错误码：${code}，消息：${message}`);
+                    // 使用递增的等待时间，给云端更多处理时间
+                    const waitTime = Math.min(1000 + (attempt - 1) * 200, 3000);
+                    await this.sleep(waitTime);
                     continue;
                 }
-                throw new Error(message || "合并分片失败");
+                // 其他错误（包括"校验失败"）直接抛出，不再重试
+                throw new Error(`${message}（错误码：${code}）` || "合并分片失败");
             }
             const data = payload.data ?? {};
             if (data.completed || data.fileID) {
                 const fileId = data.fileID ?? data.fileId ?? 0;
                 const completed = data.completed ?? (fileId ? true : false);
+                console.log(`[Pan123] 文件合并成功，fileId: ${fileId}`);
                 return {
                     fileId,
                     completed: Boolean(completed),
@@ -306,7 +316,7 @@ export class Pan123Client {
             }
             await this.sleep(1000);
         }
-        throw new Error("等待云端合并分片超时");
+        throw new Error(`等待云端合并分片超时（已重试${maxAttempts}次），preuploadID: ${preuploadId}`);
     }
 
     private async sleep(ms: number): Promise<void> {
