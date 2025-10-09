@@ -84,7 +84,7 @@ Choose what to backup in "Backup Scope":
 
 - Plugin creates a snapshot folder in 123Pan root directory
 - Snapshot naming format: `{timestamp}--{type}`, e.g., `20250106-123456--manual`
-- `repo` directory snapshots are stored in JSON format and may be large
+- `repo` directory snapshots are stored as ZIP archives to keep binary data compact
 - Auto-backup tries to execute on app close; wait for upload completion if data size is large
 
 ### Progress Indicators

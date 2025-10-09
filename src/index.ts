@@ -1,3 +1,4 @@
+import JSZip from "jszip";
 import {
     Dialog,
     Plugin,
@@ -20,7 +21,6 @@ import {
     SnapshotRemoteMeta,
 } from "./types";
 import {md5} from "./utils/md5";
-import {arrayBufferToBase64, base64ToUint8Array} from "./utils/base64";
 import {Pan123Client} from "./services/pan123";
 import {ProgressDialog} from "./utils/progress";
 
@@ -61,20 +61,6 @@ interface ExportConfResponse {
 interface RequestedComponent {
     category: BackupTarget;
     component: BackupComponentType;
-}
-
-interface RepoSnapshotEntry {
-    path: string;
-    type: "file" | "dir";
-    updated: number;
-    size?: number;
-    content?: string;
-}
-
-interface RepoSnapshot {
-    version: number;
-    generatedAt: string;
-    entries: RepoSnapshotEntry[];
 }
 
 class KernelApiError extends Error {
@@ -1041,13 +1027,11 @@ export default class SiyuanSyncPlugin extends Plugin {
             this.log("repo directory missing, skip repo backup");
             return null;
         }
-        const snapshot = await this.buildRepoSnapshot();
-        const json = JSON.stringify(snapshot);
-        const encoder = new TextEncoder();
-        const bytes = encoder.encode(json);
-        const fileName = `${request.category}-${request.component}-${snapshotId}.json`;
-        const file = new File([bytes], fileName, {type: JSON_MIME});
-        const md5Hash = md5(bytes.buffer);
+        const archive = await this.buildRepoArchive();
+        const arrayBuffer = archive.buffer.slice(archive.byteOffset, archive.byteOffset + archive.byteLength);
+        const fileName = `${request.category}-${request.component}-${snapshotId}.zip`;
+        const file = new File([arrayBuffer], fileName, {type: ZIP_MIME});
+        const md5Hash = md5(arrayBuffer);
         return {
             category: request.category,
             component: request.component,
@@ -1055,9 +1039,6 @@ export default class SiyuanSyncPlugin extends Plugin {
             file,
             md5: md5Hash,
             size: file.size,
-            meta: {
-                entryCount: snapshot.entries.length,
-            },
         };
     }
 
@@ -1398,21 +1379,22 @@ export default class SiyuanSyncPlugin extends Plugin {
     }
 
     private async restoreRepoFromArchive(buffer: ArrayBuffer): Promise<void> {
-        const text = new TextDecoder().decode(buffer);
-        const snapshot = JSON.parse(text) as RepoSnapshot;
         await this.clearRepoDirectory();
         await this.ensureDir("/repo");
-        for (const entry of snapshot.entries) {
-            const relativePath = `/repo/${entry.path.replace(/^\/+/, "")}`;
-            if (entry.type === "dir") {
-                await this.ensureDir(relativePath);
+        const zip = await JSZip.loadAsync(buffer);
+        const files = Object.values(zip.files);
+        for (const entry of files) {
+            const normalized = entry.name.replace(/^\/+/, "");
+            if (!normalized) {
                 continue;
             }
-            if (!entry.content) {
+            const targetPath = `/repo/${normalized}`;
+            if (entry.dir) {
+                await this.ensureDir(targetPath);
                 continue;
             }
-            const data = base64ToUint8Array(entry.content);
-            await this.putFile(relativePath, data);
+            const content = await entry.async("uint8array");
+            await this.putFile(targetPath, content);
         }
     }
 
@@ -1445,17 +1427,17 @@ export default class SiyuanSyncPlugin extends Plugin {
         await this.kernelForm("/api/file/putFile", form);
     }
 
-    private async buildRepoSnapshot(): Promise<RepoSnapshot> {
-        const entries: RepoSnapshotEntry[] = [];
-        await this.walkRepoDirectory("/repo", "", entries);
-        return {
-            version: 1,
-            generatedAt: new Date().toISOString(),
-            entries,
-        };
+    private async buildRepoArchive(): Promise<Uint8Array> {
+        const zip = new JSZip();
+        await this.archiveRepoDirectory(zip, "/repo", "");
+        return await zip.generateAsync({
+            type: "uint8array",
+            compression: "DEFLATE",
+            compressionOptions: {level: 6},
+        });
     }
 
-    private async walkRepoDirectory(relativePath: string, basePath: string, accumulator: RepoSnapshotEntry[]): Promise<void> {
+    private async archiveRepoDirectory(zip: JSZip, relativePath: string, basePath: string): Promise<void> {
         let list: ReadDirResponse[] = [];
         try {
             list = await this.kernelPost<ReadDirResponse[]>("/api/file/readDir", {path: relativePath});
@@ -1469,22 +1451,11 @@ export default class SiyuanSyncPlugin extends Plugin {
             const childRelative = joinWorkspaceRelative(relativePath, item.name);
             const childPath = basePath ? `${basePath}/${item.name}` : item.name;
             if (item.isDir) {
-                accumulator.push({
-                    path: `${childPath}/`,
-                    type: "dir",
-                    updated: item.updated,
-                });
-                await this.walkRepoDirectory(childRelative, childPath, accumulator);
+                zip.folder(childPath);
+                await this.archiveRepoDirectory(zip, childRelative, childPath);
             } else {
                 const buffer = await this.fetchBinaryFile(childRelative);
-                const base64 = arrayBufferToBase64(buffer);
-                accumulator.push({
-                    path: childPath,
-                    type: "file",
-                    updated: item.updated,
-                    size: buffer.byteLength,
-                    content: base64,
-                });
+                zip.file(childPath, buffer, {binary: true});
             }
         }
     }
