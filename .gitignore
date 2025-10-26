@@ -1,0 +1,15 @@
+.idea
+node_modules
+.DS_Store
+.eslintcache
+dist
+package.zip
+*.zip
+index.css
+index.js
+/i18n
+.cursor/
+.superdesign/
+.windsurfrules
+.claude/
+package/
