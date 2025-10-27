@@ -1,5 +1,43 @@
 # 更新日志 / Changelog
 
+## [1.0.3] - 2025-10-27
+
+### 修复 / Fixed
+- 🐛 **[关键修复]** 彻底修复同步失败问题："The Etag field is required; The Etag value is invalid; 文件大小size不能为空"
+  - **深层根因**：多处 `uploadSingle` 调用未传递 `md5` 和 `size` 参数
+  - **影响范围**：
+    - ❌ instance-id 文件上传
+    - ❌ 同步锁文件上传
+    - ❌ 云端索引文件上传
+    - ❌ 同步历史文件上传
+    - ✅ 主数据文件上传（已有 md5/size）
+  - **解决方案**：
+    - 修改 `UploadSingleOptions` 接口，`md5` 和 `size` 改为可选参数
+    - 在 `uploadSingle` 方法内部自动计算缺失的 MD5 和 size
+    - 新增 `computeFileMd5` 方法，支持大文件流式计算
+
+### 改进 / Improved
+- 🔧 上传流程更加健壮，自动处理缺失的文件元数据
+- 🔧 统一 MD5 计算逻辑，确保所有文件上传都有正确的哈希值
+- 🔧 提升代码容错性，减少因参数缺失导致的错误
+
+### 技术细节 / Technical Details
+```typescript
+// 修复前：必填参数，很多调用缺失
+interface UploadSingleOptions {
+    md5: string;  // ❌ 必填，但很多地方没传
+    size: number; // ❌ 必填，但很多地方没传
+}
+
+// 修复后：可选参数，自动计算
+interface UploadSingleOptions {
+    md5?: string;  // ✅ 可选，未提供时自动计算
+    size?: number; // ✅ 可选，未提供时从 file 获取
+}
+```
+
+---
+
 ## [1.0.2] - 2025-10-27
 
 ### 修复 / Fixed

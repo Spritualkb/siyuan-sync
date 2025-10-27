@@ -37,8 +37,8 @@ export interface FileDetail {
 export interface UploadSingleOptions {
     parentId: number;
     file: File;
-    md5: string;
-    size: number;
+    md5?: string; // 可选，如果未提供则自动计算
+    size?: number; // 可选，如果未提供则自动从 file 获取
     filename: string;
     duplicateStrategy?: number; // 1 keep both, 2 override
     onProgress?: (uploadedBytes: number, totalBytes: number, currentSlice?: number, totalSlices?: number) => void;
@@ -416,9 +416,18 @@ export class Pan123Client {
     }
 
     public async uploadSingle(options: UploadSingleOptions): Promise<UploadResult> {
-        const session = await this.createUploadSession(options);
+        // 自动计算缺失的 md5 和 size
+        const normalizedOptions: Required<UploadSingleOptions> = {
+            ...options,
+            md5: options.md5 || await this.computeFileMd5(options.file),
+            size: options.size ?? options.file.size,
+            duplicateStrategy: options.duplicateStrategy ?? 0,
+            onProgress: options.onProgress ?? (() => {}),
+        };
+        
+        const session = await this.createUploadSession(normalizedOptions);
         if (session.reuse && session.fileId) {
-            options.onProgress?.(options.size, options.size);
+            normalizedOptions.onProgress(normalizedOptions.size, normalizedOptions.size);
             return {fileId: session.fileId, completed: true};
         }
 
@@ -427,13 +436,32 @@ export class Pan123Client {
         }
 
         const server = await this.resolveUploadServer(session.servers);
-        await this.uploadSlices(server, session, options);
+        await this.uploadSlices(server, session, normalizedOptions);
         const result = await this.completeUpload(session.preuploadId);
         if (!result.fileId && session.fileId) {
             // fallback when complete doesn't echo fileId but create did
             result.fileId = session.fileId;
         }
         return result;
+    }
+
+    /**
+     * 计算文件的 MD5 哈希值
+     */
+    private async computeFileMd5(file: File): Promise<string> {
+        const chunkSize = 2 * 1024 * 1024; // 2MB
+        const spark = new SparkMD5.ArrayBuffer();
+        let offset = 0;
+
+        while (offset < file.size) {
+            const end = Math.min(offset + chunkSize, file.size);
+            const chunk = file.slice(offset, end);
+            const buffer = await chunk.arrayBuffer();
+            spark.append(buffer);
+            offset = end;
+        }
+
+        return spark.end().toLowerCase();
     }
 
     private async createUploadSession(options: UploadSingleOptions): Promise<UploadSession> {

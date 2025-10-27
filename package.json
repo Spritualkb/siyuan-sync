@@ -1,6 +1,6 @@
 {
   "name": "siyuan-sync",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Automated backup/restore and multi-device sync via 123Pan for SiYuan Note",
   "main": "./src/index.js",
   "scripts": {
