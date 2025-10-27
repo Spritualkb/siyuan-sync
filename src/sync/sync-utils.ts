@@ -305,7 +305,7 @@ export class SyncUtils {
     /**
      * 上传本地文件到云端
      * 文件名使用路径编码，以避免目录结构问题
-     * @returns fileId
+     * @returns 包含 fileId, md5, size 的对象
      */
     static async uploadLocalFileToCloud(
         client: Pan123Client,
@@ -313,7 +313,7 @@ export class SyncUtils {
         localPath: string,
         fileName: string,
         onProgress?: (uploaded: number, total: number) => void
-    ): Promise<number> {
+    ): Promise<{fileId: number; md5: string; size: number}> {
         console.log(`Uploading ${localPath} to cloud...`);
         
         // 获取本地文件
@@ -359,8 +359,12 @@ export class SyncUtils {
             },
         });
 
-        console.log(`Uploaded ${localPath} to cloud, fileId: ${result.fileId}`);
-        return result.fileId;
+        console.log(`Uploaded ${localPath} to cloud, fileId: ${result.fileId}, md5: ${md5}, size: ${file.size}`);
+        return {
+            fileId: result.fileId,
+            md5: md5,
+            size: file.size,
+        };
     }
     
     /**

@@ -541,31 +541,34 @@ export class SyncManager {
             const fileName = path.split("/").pop() || "file";
             const encodedFileName = SyncUtils.encodePathToFileName(path);
             
-            const fileId = await SyncUtils.uploadLocalFileToCloud(
+            // 上传文件并获取完整的元数据（fileId, md5, size）
+            const uploadResult = await SyncUtils.uploadLocalFileToCloud(
                 this.client,
                 this.remoteFolderId,
                 path,
                 fileName
             );
             
-            // 立即更新云端索引
+            // 立即更新云端索引，使用上传时计算的真实 md5 和 size
             const cloudFileInfo: CloudFileInfo = {
                 name: localFile.name,
                 path: path,
                 encodedFileName: encodedFileName,
-                fileId: fileId,
-                updated: localFile.updated,
-                size: localFile.size || 0,
-                md5: localFile.md5,
+                fileId: uploadResult.fileId,
+                updated: localFile.updated || Date.now(),
+                size: uploadResult.size,  // ✅ 使用上传时的真实大小
+                md5: uploadResult.md5,    // ✅ 使用上传时计算的真实MD5
                 isDir: false,
             };
             
             await this.cloudIndexManager.updateFile(path, cloudFileInfo);
-            console.log(`Updated cloud index for uploaded file: ${path}`);
+            console.log(`Updated cloud index for uploaded file: ${path} (size: ${uploadResult.size}, md5: ${uploadResult.md5})`);
             
-            // 更新本地文件信息，记录fileId
+            // 更新本地文件信息，记录完整元数据
             if (localFile) {
-                localFile.fileId = fileId;
+                localFile.fileId = uploadResult.fileId;
+                localFile.size = uploadResult.size;
+                localFile.md5 = uploadResult.md5;
             }
         } catch (error) {
             console.error(`Failed to upload file ${path}:`, error);

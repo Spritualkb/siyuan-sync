@@ -1,5 +1,24 @@
 # 更新日志 / Changelog
 
+## [1.0.2] - 2025-10-27
+
+### 修复 / Fixed
+- 🐛 **[关键修复]** 修复同步失败问题："The Etag field is required; The Etag value is invalid; 文件大小size不能为空"
+  - **根因**：`/api/file/readDir` API 不返回文件的 `md5` 和 `size` 字段
+  - **解决方案**：修改 `uploadLocalFileToCloud` 方法，返回上传时计算的真实 MD5 和 size
+  - **影响范围**：云端索引现在正确存储文件元数据，确保后续同步操作的准确性
+
+### 改进 / Improved
+- 🔧 优化上传日志，显示实际的 MD5 和文件大小
+- 🔧 改进本地文件元数据更新机制，确保 fileId、md5、size 同步更新
+
+### 技术细节 / Technical Details
+- 修改 `SyncUtils.uploadLocalFileToCloud` 返回类型：`Promise<number>` → `Promise<{fileId: number; md5: string; size: number}>`
+- 修改 `SyncManager.uploadFileToCloud` 使用上传返回的完整元数据更新索引
+- 确保云端索引 (CloudIndexV2) 的 `md5` 和 `size` 字段始终有效
+
+---
+
 ## [1.0.1] - 2025-10-27
 
 ### 新增 / Added
