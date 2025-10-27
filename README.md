@@ -141,7 +141,7 @@ Choose what to backup in "Backup Scope":
 
 ## 📄 License
 
-MIT License
+AGPL-3.0 License
 
 ## 🙏 Acknowledgments
 
