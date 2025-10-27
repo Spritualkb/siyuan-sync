@@ -26,6 +26,7 @@ import {Pan123Client} from "./services/pan123";
 import {ProgressDialog} from "./utils/progress";
 import {FolderSyncManager, SyncProgress} from "./services/folder-sync";
 import {FolderSyncConfig} from "./types";
+import {SyncManager} from "./sync";
 
 const SETTINGS_KEY = "siyuan-sync-settings";
 const EXPORT_TEMP_RELATIVE = "/temp/siyuan-sync";
@@ -83,16 +84,25 @@ export default class SiyuanSyncPlugin extends Plugin {
     private kernelInfo: KernelInfo | null = null;
     private readonly cloudClient = new Pan123Client();
     private readonly folderSyncManager: FolderSyncManager = new FolderSyncManager(this.cloudClient);
+    private syncManager: SyncManager | null = null;
     private statusElements: Record<string, HTMLElement> = {};
     private saveSettingsTimer: number | null = null;
-    private readonly beforeUnloadHandler = () => {
-        if (!this.settings.autoBackupEnabled || !this.settings.autoBackupOnClose) {
-            return;
+    private readonly beforeUnloadHandler = async () => {
+        // 执行自动备份
+        if (this.settings.autoBackupEnabled && this.settings.autoBackupOnClose) {
+            if (this.canRunAutoBackup()) {
+                await this.runAutoBackup();
+            }
         }
-        if (!this.canRunAutoBackup()) {
-            return;
+
+        // 执行多设备同步
+        if (this.settings.enableDeviceSync && this.settings.syncOnClose) {
+            try {
+                await this.runDeviceSync();
+            } catch (error) {
+                this.log(`Auto sync on close failed: ${(error as Error).message}`);
+            }
         }
-        void this.runAutoBackup();
     };
 
     async onload(): Promise<void> {
@@ -103,6 +113,17 @@ export default class SiyuanSyncPlugin extends Plugin {
             window.addEventListener("beforeunload", this.beforeUnloadHandler);
             this.log("initialized");
             showMessage(`[${this.name}] 已加载，当前工作空间：${this.kernelInfo?.paths.workspaceDir ?? "未知"}`);
+
+            // 如果启用了打开时同步，执行同步
+            if (this.settings.enableDeviceSync && this.settings.syncOnOpen) {
+                setTimeout(async () => {
+                    try {
+                        await this.runDeviceSync();
+                    } catch (error) {
+                        this.log(`Auto sync on open failed: ${(error as Error).message}`);
+                    }
+                }, 2000); // 延迟2秒执行，确保界面加载完成
+            }
         } catch (error) {
             console.error(`[${this.name}] 初始化失败`, error);
             showMessage(`[${this.name}] 初始化失败：${(error as Error).message}`, 7000, "error");
@@ -140,7 +161,7 @@ export default class SiyuanSyncPlugin extends Plugin {
             const snapshots = this.settings.snapshots ?? [];
             if (!snapshots.length) {
                 progress.destroy();
-                showMessage(`[${this.name}] 未找到远程快照`, 5000, "warning");
+                showMessage(`[${this.name}] ⚠️ 未找到远程快照`, 5000, "info");
                 return;
             }
 
@@ -188,6 +209,47 @@ export default class SiyuanSyncPlugin extends Plugin {
         }
     }
 
+    /**
+     * 执行多设备同步
+     */
+    public async runDeviceSync(): Promise<void> {
+        if (!this.settings.enableDeviceSync) {
+            this.log("Device sync is disabled");
+            return;
+        }
+
+        try {
+            // 确保已登录
+            await this.ensureAccessToken();
+            const remoteFolderId = await this.ensureRemoteRootFolder();
+
+            // 每次都重新创建同步管理器，以确保使用最新的冲突策略
+            // 因为用户可能在设置中更改了策略
+            this.syncManager = new SyncManager(
+                this.cloudClient,
+                remoteFolderId,
+                this.i18n as Record<string, string>,
+                this.settings.syncConflictStrategy || "keepNewer"
+            );
+
+            // 执行同步
+            showMessage(`[${this.name}] ${this.t("syncingWithRemote")}`, 0, "info", "deviceSyncNotification");
+            await this.syncManager.sync();
+
+            // 更新最后同步时间
+            this.settings.lastSyncAt = new Date().toISOString();
+            await this.saveSettings();
+
+            // 移除同步消息
+            showMessage("", 1, "info", "deviceSyncNotification");
+        } catch (error) {
+            console.error(`[${this.name}] Device sync failed:`, error);
+            // 移除同步消息
+            showMessage("", 1, "info", "deviceSyncNotification");
+            throw error;
+        }
+    }
+
     private log(message: string, ...args: unknown[]): void {
         console.debug(`[${this.name}] ${message}`, ...args);
     }
@@ -218,6 +280,13 @@ export default class SiyuanSyncPlugin extends Plugin {
             accessToken: undefined,
             snapshots: [],
             folderSyncConfigs: [],
+            // 多设备同步默认设置
+            enableDeviceSync: false,
+            syncOnOpen: false,
+            syncOnClose: false,
+            syncConflictStrategy: "keepNewer",
+            lastSyncAt: undefined,
+            deviceName: undefined,
         };
     }
 
@@ -237,6 +306,13 @@ export default class SiyuanSyncPlugin extends Plugin {
                 autoBackupTracker: stored.autoBackupTracker ?? {},
                 snapshots: stored.snapshots ?? [],
                 folderSyncConfigs: stored.folderSyncConfigs ?? [],
+                // 多设备同步设置
+                enableDeviceSync: stored.enableDeviceSync ?? false,
+                syncOnOpen: stored.syncOnOpen ?? false,
+                syncOnClose: stored.syncOnClose ?? false,
+                syncConflictStrategy: stored.syncConflictStrategy ?? "keepNewer",
+                lastSyncAt: stored.lastSyncAt,
+                deviceName: stored.deviceName,
             };
         } else {
             this.settings = defaults;
@@ -530,6 +606,140 @@ export default class SiyuanSyncPlugin extends Plugin {
             createActionElement: () => folderSyncContainer,
         });
 
+        // 多设备同步UI
+        const deviceSyncContainer = document.createElement("div");
+        deviceSyncContainer.style.display = "flex";
+        deviceSyncContainer.style.flexDirection = "column";
+        deviceSyncContainer.style.gap = "12px";
+
+        // 启用多设备同步开关
+        const enableDeviceSyncToggle = this.createCheckboxRow(
+            this.t("deviceSyncEnable"),
+            this.settings.enableDeviceSync ?? false,
+            (checked) => {
+                this.settings.enableDeviceSync = checked;
+                this.scheduleSaveSettings();
+                // 更新其他选项的可用性
+                updateDeviceSyncOptions();
+            }
+        );
+        deviceSyncContainer.append(enableDeviceSyncToggle.wrapper);
+
+        // 打开时同步
+        const syncOnOpenToggle = this.createCheckboxRow(
+            this.t("deviceSyncOnOpen"),
+            this.settings.syncOnOpen ?? false,
+            (checked) => {
+                this.settings.syncOnOpen = checked;
+                this.scheduleSaveSettings();
+            }
+        );
+        deviceSyncContainer.append(syncOnOpenToggle.wrapper);
+
+        // 关闭时同步
+        const syncOnCloseToggle = this.createCheckboxRow(
+            this.t("deviceSyncOnClose"),
+            this.settings.syncOnClose ?? false,
+            (checked) => {
+                this.settings.syncOnClose = checked;
+                this.scheduleSaveSettings();
+            }
+        );
+        deviceSyncContainer.append(syncOnCloseToggle.wrapper);
+
+        // 设备名称
+        const deviceNameWrapper = document.createElement("div");
+        deviceNameWrapper.style.display = "flex";
+        deviceNameWrapper.style.flexDirection = "column";
+        deviceNameWrapper.style.gap = "4px";
+        const deviceNameLabel = document.createElement("span");
+        deviceNameLabel.textContent = this.t("deviceSyncDeviceName");
+        const deviceNameInput = document.createElement("input");
+        deviceNameInput.className = "b3-text-field";
+        deviceNameInput.placeholder = this.t("deviceSyncDeviceNamePlaceholder");
+        deviceNameInput.value = this.settings.deviceName || "";
+        deviceNameInput.addEventListener("input", () => {
+            this.settings.deviceName = deviceNameInput.value.trim();
+            this.scheduleSaveSettings();
+        });
+        deviceNameWrapper.append(deviceNameLabel, deviceNameInput);
+        deviceSyncContainer.append(deviceNameWrapper);
+
+        // 冲突策略
+        const conflictStrategyWrapper = document.createElement("div");
+        conflictStrategyWrapper.style.display = "flex";
+        conflictStrategyWrapper.style.flexDirection = "column";
+        conflictStrategyWrapper.style.gap = "4px";
+        const conflictStrategyLabel = document.createElement("span");
+        conflictStrategyLabel.textContent = this.t("deviceSyncConflictStrategy");
+        const conflictStrategySelect = document.createElement("select");
+        conflictStrategySelect.className = "b3-select";
+        conflictStrategySelect.innerHTML = `
+            <option value="keepBoth">${this.t("deviceSyncStrategyKeepBoth")}</option>
+            <option value="keepNewer">${this.t("deviceSyncStrategyKeepNewer")}</option>
+            <option value="keepLocal">${this.t("deviceSyncStrategyKeepLocal")}</option>
+            <option value="keepRemote">${this.t("deviceSyncStrategyKeepRemote")}</option>
+        `;
+        conflictStrategySelect.value = this.settings.syncConflictStrategy || "keepNewer";
+        conflictStrategySelect.addEventListener("change", () => {
+            this.settings.syncConflictStrategy = conflictStrategySelect.value as any;
+            this.scheduleSaveSettings();
+        });
+        conflictStrategyWrapper.append(conflictStrategyLabel, conflictStrategySelect);
+        deviceSyncContainer.append(conflictStrategyWrapper);
+
+        // 同步按钮和状态
+        const deviceSyncActionsWrapper = document.createElement("div");
+        deviceSyncActionsWrapper.style.display = "flex";
+        deviceSyncActionsWrapper.style.gap = "8px";
+        deviceSyncActionsWrapper.style.alignItems = "center";
+
+        const deviceSyncButton = document.createElement("button");
+        deviceSyncButton.className = "b3-button b3-button--primary";
+        deviceSyncButton.textContent = this.t("deviceSyncNow");
+        deviceSyncButton.addEventListener("click", async () => {
+            deviceSyncButton.disabled = true;
+            try {
+                await this.runDeviceSync();
+            } catch (error) {
+                showMessage(`[${this.name}] ${this.t("syncFailed")}: ${(error as Error).message}`, 7000, "error");
+            } finally {
+                deviceSyncButton.disabled = false;
+                this.refreshSettingStatus();
+            }
+        });
+        deviceSyncActionsWrapper.append(deviceSyncButton);
+
+        const deviceSyncStatusLabel = document.createElement("span");
+        deviceSyncStatusLabel.style.fontSize = "12px";
+        deviceSyncStatusLabel.style.color = "var(--b3-theme-on-surface)";
+        deviceSyncStatusLabel.style.opacity = "0.6";
+        if (this.settings.lastSyncAt) {
+            deviceSyncStatusLabel.textContent = `${this.t("deviceSyncLastSync")}: ${this.formatDateTime(this.settings.lastSyncAt)}`;
+        } else {
+            deviceSyncStatusLabel.textContent = this.t("notYet");
+        }
+        deviceSyncActionsWrapper.append(deviceSyncStatusLabel);
+
+        deviceSyncContainer.append(deviceSyncActionsWrapper);
+
+        // 更新选项可用性的函数
+        const updateDeviceSyncOptions = () => {
+            const enabled = this.settings.enableDeviceSync ?? false;
+            syncOnOpenToggle.input.disabled = !enabled;
+            syncOnCloseToggle.input.disabled = !enabled;
+            deviceNameInput.disabled = !enabled;
+            conflictStrategySelect.disabled = !enabled;
+            deviceSyncButton.disabled = !enabled;
+        };
+        updateDeviceSyncOptions();
+
+        this.setting.addItem({
+            title: this.t("deviceSyncTitle"),
+            description: this.t("deviceSyncDesc"),
+            createActionElement: () => deviceSyncContainer,
+        });
+
         const statusContainer = document.createElement("div");
         statusContainer.className = "fn__flex-column";
         statusContainer.style.gap = "4px";
@@ -701,7 +911,7 @@ export default class SiyuanSyncPlugin extends Plugin {
         await this.syncRemoteSnapshotIndex();
         const snapshots = this.settings.snapshots ?? [];
         if (!snapshots.length) {
-            showMessage(`[${this.name}] ${this.t("noSnapshots")}`, 5000, "warning");
+            showMessage(`[${this.name}] ⚠️ ${this.t("noSnapshots")}`, 5000, "info");
             return;
         }
         const options = snapshots.map((snapshot) => {
@@ -906,7 +1116,7 @@ export default class SiyuanSyncPlugin extends Plugin {
         if (requests.length === 0) {
             this.log("no backup targets selected");
             if (reason === "manual") {
-                showMessage(`[${this.name}] 未选择需要备份的目录`, 5000, "warning");
+                showMessage(`[${this.name}] ⚠️ 未选择需要备份的目录`, 5000, "info");
             }
             return null;
         }
@@ -1124,7 +1334,7 @@ export default class SiyuanSyncPlugin extends Plugin {
         const fileName = `${request.category}-${request.component}-${snapshotId}.zip`;
         
         // 创建Blob而不是直接使用ArrayBuffer，减少内存占用
-        const blob = new Blob([archive], {type: ZIP_MIME});
+        const blob = new Blob([new Uint8Array(archive)], {type: ZIP_MIME});
         const file = new File([blob], fileName, {type: ZIP_MIME});
         
         // 使用流式MD5计算
@@ -1560,7 +1770,7 @@ export default class SiyuanSyncPlugin extends Plugin {
         await this.clearRepoDirectory();
         await this.ensureDir("/repo");
         const zip = await JSZip.loadAsync(buffer);
-        const files = Object.values(zip.files);
+        const files = Object.values(zip.files) as JSZip.JSZipObject[];
         for (const entry of files) {
             const normalized = entry.name.replace(/^\/+/, "");
             if (!normalized) {
@@ -1600,7 +1810,7 @@ export default class SiyuanSyncPlugin extends Plugin {
         form.append("path", relativePath);
         form.append("isDir", "false");
         form.append("modTime", `${Math.floor(Date.now() / 1000)}`);
-        const file = new File([data], fileName);
+        const file = new File([new Uint8Array(data)], fileName);
         form.append("file", file);
         await this.kernelForm("/api/file/putFile", form);
     }

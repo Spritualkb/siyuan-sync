@@ -98,7 +98,13 @@ export class Pan123Client {
         };
     }
 
-    public async listFiles(parentFileId: number, limit = 100): Promise<CloudFile[]> {
+    /**
+     * 获取文件列表
+     * @param parentFileId 父目录ID，根目录为0
+     * @param limit 每页数量，最大100
+     * @param includeTrash 是否包含回收站文件，默认false
+     */
+    public async listFiles(parentFileId: number, limit = 100, includeTrash = false): Promise<CloudFile[]> {
         const results: CloudFile[] = [];
         let lastFileId = 0;
         do {
@@ -119,13 +125,48 @@ export class Pan123Client {
             }
             const data = payload.data ?? {};
             const fileList: CloudFile[] = data.fileList ?? [];
-            results.push(...fileList);
+            
+            // 过滤回收站文件
+            const filteredFiles = includeTrash 
+                ? fileList 
+                : fileList.filter(f => f.trashed !== 1);
+            
+            results.push(...filteredFiles);
             lastFileId = data.lastFileId ?? -1;
         } while (lastFileId && lastFileId > 0);
+        
+        console.log(`[Pan123] 获取文件列表完成: 共 ${results.length} 个文件${includeTrash ? '' : '（已过滤回收站）'}`);
         return results;
     }
 
+    /**
+     * 验证文件/文件夹名称
+     */
+    private validateFileName(name: string, isFolder = false): void {
+        const type = isFolder ? "文件夹" : "文件";
+        
+        if (!name || name.trim().length === 0) {
+            throw new Error(`${type}名不能为空`);
+        }
+        
+        if (/^\s+$/.test(name)) {
+            throw new Error(`${type}名不能全部是空格`);
+        }
+        
+        if (name.length > 255) {
+            throw new Error(`${type}名长度不能超过255个字符`);
+        }
+        
+        const invalidChars = /["\\/:*?|><]/;
+        if (invalidChars.test(name)) {
+            throw new Error(`${type}名不能包含以下字符: " \\ / : * ? | > <`);
+        }
+    }
+
     public async createFolder(parentId: number, name: string): Promise<{fileId: number; name: string}> {
+        // 验证文件夹名
+        this.validateFileName(name, true);
+        
         const response = await fetch(`${API_BASE}/upload/v1/file/mkdir`, {
             method: "POST",
             headers: this.authHeaders({"Content-Type": "application/json"}),
@@ -175,6 +216,9 @@ export class Pan123Client {
      * 重命名文件/文件夹
      */
     public async renameFile(fileId: number, newName: string): Promise<void> {
+        // 验证文件名
+        this.validateFileName(newName, false);
+        
         const response = await fetch(`${API_BASE}/api/v1/file/name`, {
             method: "PUT",
             headers: this.authHeaders({"Content-Type": "application/json"}),
@@ -193,10 +237,16 @@ export class Pan123Client {
 
     /**
      * 移动文件/文件夹
+     * @param fileIds 文件ID数组，单次最多100个
+     * @param toParentFileId 目标文件夹ID
      */
     public async moveFiles(fileIds: number[], toParentFileId: number): Promise<void> {
         if (!fileIds.length) {
             return;
+        }
+        
+        if (fileIds.length > 100) {
+            throw new Error("单次最多移动100个文件");
         }
         
         const response = await fetch(`${API_BASE}/api/v1/file/move`, {
@@ -252,10 +302,19 @@ export class Pan123Client {
         return results;
     }
 
+    /**
+     * 删除文件到回收站
+     * @param fileIds 文件ID数组，单次最多100个
+     */
     public async deleteFiles(fileIds: number[]): Promise<void> {
         if (!fileIds.length) {
             return;
         }
+        
+        if (fileIds.length > 100) {
+            throw new Error("单次最多删除100个文件");
+        }
+        
         const response = await fetch(`${API_BASE}/api/v1/file/trash`, {
             method: "POST",
             headers: this.authHeaders({"Content-Type": "application/json"}),
@@ -268,6 +327,66 @@ export class Pan123Client {
         }
     }
 
+    /**
+     * 从回收站恢复文件
+     * @param fileIds 文件ID数组，单次最多100个
+     */
+    public async recoverFiles(fileIds: number[]): Promise<void> {
+        if (!fileIds.length) {
+            return;
+        }
+        
+        if (fileIds.length > 100) {
+            throw new Error("单次最多恢复100个文件");
+        }
+        
+        console.log(`[Pan123] 恢复 ${fileIds.length} 个文件`);
+        
+        const response = await fetch(`${API_BASE}/api/v1/file/recover`, {
+            method: "POST",
+            headers: this.authHeaders({"Content-Type": "application/json"}),
+            body: JSON.stringify({fileIDs: fileIds}),
+        });
+        
+        await this.ensureOk(response, "恢复文件失败");
+        const payload = await response.json();
+        if (payload.code !== 0) {
+            throw new Error(payload.message || "恢复文件失败");
+        }
+    }
+
+    /**
+     * 彻底删除文件（不可恢复）
+     * @param fileIds 文件ID数组，单次最多100个
+     */
+    public async permanentDeleteFiles(fileIds: number[]): Promise<void> {
+        if (!fileIds.length) {
+            return;
+        }
+        
+        if (fileIds.length > 100) {
+            throw new Error("单次最多删除100个文件");
+        }
+        
+        console.log(`[Pan123] 彻底删除 ${fileIds.length} 个文件`);
+        
+        const response = await fetch(`${API_BASE}/api/v1/file/clean`, {
+            method: "DELETE",
+            headers: this.authHeaders({"Content-Type": "application/json"}),
+            body: JSON.stringify({fileIDs: fileIds}),
+        });
+        
+        await this.ensureOk(response, "彻底删除文件失败");
+        const payload = await response.json();
+        if (payload.code !== 0) {
+            throw new Error(payload.message || "彻底删除文件失败");
+        }
+    }
+
+    /**
+     * 获取下载链接
+     * @param fileId 文件ID
+     */
     public async getDownloadUrl(fileId: number): Promise<string> {
         const url = new URL(`${API_BASE}/api/v1/file/download_info`);
         url.searchParams.set("fileId", `${fileId}`);
@@ -277,9 +396,18 @@ export class Pan123Client {
         });
         await this.ensureOk(response, "获取下载链接失败");
         const payload = await response.json();
+        
+        // 处理特定错误码
+        if (payload.code === 5113) {
+            throw new Error("今日下载流量已超出限制（1GB/天），请升级VIP或明日再试");
+        }
+        if (payload.code === 5066) {
+            throw new Error("文件不存在或已被删除");
+        }
         if (payload.code !== 0) {
             throw new Error(payload.message || "获取下载链接失败");
         }
+        
         const downloadUrl = payload?.data?.downloadUrl;
         if (!downloadUrl) {
             throw new Error("下载链接为空");

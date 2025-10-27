@@ -2,7 +2,7 @@
   "name": "siyuan-sync",
   "author": "lkb",
   "url": "https://github.com/Spritualkb/siyuan-sync",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "3.3.0",
   "backends": [
     "windows",
@@ -26,8 +26,8 @@
     "zh_CN": "思源同步助手"
   },
   "description": {
-    "default": "Automated local snapshots with 123Pan cloud backup and restore.",
-    "zh_CN": "集成本地打包与 123 网盘云端备份/恢复的同步助手。"
+    "default": "Automated backup/restore and multi-device sync via 123Pan cloud storage.",
+    "zh_CN": "集成本地备份、恢复与多设备实时同步的 123 网盘助手。"
   },
   "readme": {
     "default": "README.md",
@@ -42,6 +42,8 @@
   "keywords": [
     "sync",
     "backup",
-    "123pan"
+    "123pan",
+    "multi-device",
+    "cloud"
   ]
 }

@@ -117,4 +117,12 @@ export interface PluginSettings {
     lastKnownExistence?: Record<BackupTarget, boolean>;
     snapshots?: SnapshotRemoteMeta[];
     folderSyncConfigs?: FolderSyncConfig[]; // 文件夹同步配置列表
+    
+    // 多设备同步设置
+    enableDeviceSync?: boolean; // 是否启用多设备同步
+    syncOnOpen?: boolean; // 打开时自动同步
+    syncOnClose?: boolean; // 关闭时自动同步
+    syncConflictStrategy?: "keepBoth" | "keepNewer" | "keepLocal" | "keepRemote"; // 冲突策略
+    lastSyncAt?: string; // 最后同步时间
+    deviceName?: string; // 设备名称
 }
